@@ -1,7 +1,12 @@
 [package]
 name = "kola"
 version = "0.1.0"
+description = "Fast and lightweight language server for Kotlin"
 edition = "2021"
+license = "GPL-3.0"
+repository = "https://github.com/fwcd/kola"
+keywords = ["kotlin", "lsp", "ide"]
+categories = ["compilers", "development-tools"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
