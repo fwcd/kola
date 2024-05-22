@@ -4,6 +4,8 @@ use tokio::sync::Mutex;
 use tower_lsp::{jsonrpc::Result, lsp_types::{DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, InitializeParams, InitializeResult, InitializedParams, MessageType, ServerCapabilities, ServerInfo, TextDocumentSyncCapability, TextDocumentSyncKind, Url}, Client, LanguageServer};
 use tree_sitter::{Parser, Tree};
 
+use crate::utils::format_tree;
+
 pub struct Backend {
     client: Client,
     document_map: DashMap<Url, Rope>,
@@ -28,30 +30,9 @@ impl Backend {
     async fn on_change(&self, uri: Url, text: &str) {
         self.document_map.insert(uri.clone(), Rope::from_str(text));
         // TODO: How do we handle old_tree properly for incremental parsing?
-        if let Some(parse) = self.parser.lock().await.parse(text, None) {
-            // TODO: Factor out this as a utility function for debug printing
-            {
-                let mut cursor = parse.root_node().walk();
-                let mut lines = Vec::new();
-                'outer: loop {
-                    self.client.log_message(MessageType::INFO, format!("Visiting {:?} at depth {}", cursor.node(), cursor.depth())).await;
-                    lines.push(format!("{}{:?}", " ".repeat(cursor.depth() as usize), cursor.node()));
-                    if cursor.goto_first_child() {
-                        continue;
-                    }
-                    if cursor.goto_next_sibling() {
-                        continue;
-                    }
-                    while cursor.goto_parent() {
-                        if cursor.goto_next_sibling() {
-                            continue 'outer;
-                        }
-                    }
-                    break;
-                }
-                self.client.log_message(MessageType::INFO, format!("Parsed\n{}", lines.join("\n"))).await;
-            }
-            self.parse_map.insert(uri, parse);
+        if let Some(tree) = self.parser.lock().await.parse(text, None) {
+            self.client.log_message(MessageType::INFO, format!("Parsed\n{}", format_tree(&tree))).await;
+            self.parse_map.insert(uri, tree);
         } else {
             self.parse_map.remove(&uri);
         }
