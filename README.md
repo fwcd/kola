@@ -4,3 +4,6 @@
 [![Build](https://github.com/fwcd/kola/actions/workflows/build.yml/badge.svg)](https://github.com/fwcd/kola/actions/workflows/build.yml)
 
 A new language server for Kotlin, written from scratch using Tree-sitter.
+
+> [!IMPORTANT]
+> This project is still highly work-in-progress and is still missing many features.
