@@ -1,8 +1,8 @@
 use dashmap::DashMap;
 use ropey::Rope;
 use tokio::sync::Mutex;
-use tower_lsp::{jsonrpc::Result, lsp_types::{DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, InitializeParams, InitializeResult, InitializedParams, MessageType, ServerCapabilities, ServerInfo, TextDocumentSyncCapability, TextDocumentSyncKind, Url}, Client, LanguageServer};
-use tree_sitter::{Parser, Tree};
+use tower_lsp::{jsonrpc::Result, lsp_types::{CompletionItem, CompletionItemKind, CompletionOptions, CompletionParams, CompletionResponse, DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, InitializeParams, InitializeResult, InitializedParams, MessageType, ServerCapabilities, ServerInfo, TextDocumentSyncCapability, TextDocumentSyncKind, Url}, Client, LanguageServer};
+use tree_sitter::{Parser, Query, QueryCursor, Tree};
 
 use crate::utils::format_tree;
 
@@ -10,6 +10,7 @@ pub struct Backend {
     client: Client,
     document_map: DashMap<Url, Rope>,
     parse_map: DashMap<Url, Tree>,
+    functions_map: DashMap<Url, Vec<String>>,
     parser: Mutex<Parser>,
 }
 
@@ -21,6 +22,7 @@ impl Backend {
             client,
             document_map: DashMap::new(),
             parse_map: DashMap::new(),
+            functions_map: DashMap::new(),
             parser: Mutex::new(parser),
         }
     }
@@ -32,6 +34,17 @@ impl Backend {
         // TODO: How do we handle old_tree properly for incremental parsing?
         if let Some(tree) = self.parser.lock().await.parse(text, None) {
             self.client.log_message(MessageType::INFO, format!("Parsed\n{}", format_tree(&tree))).await;
+
+            // Query function declarations (for proof-of-concept code completion)
+            let query = Query::new(&tree_sitter_kotlin::language(), "(function_declaration (simple_identifier) @name)").unwrap(); // TODO: Use proper error handling
+            let mut cursor = QueryCursor::new();
+            let mut functions = Vec::new();
+            for query_match in cursor.matches(&query, tree.root_node(), text.as_bytes()) {
+                let name = query_match.captures[0].node.utf8_text(text.as_bytes()).unwrap().to_owned(); // TODO: Use proper error handling
+                functions.push(name);
+            }
+            self.functions_map.insert(uri.clone(), functions);
+
             self.parse_map.insert(uri, tree);
         } else {
             self.parse_map.remove(&uri);
@@ -50,6 +63,7 @@ impl LanguageServer for Backend {
                 version: Some(env!("CARGO_PKG_VERSION").to_owned()),
             }),
             capabilities: ServerCapabilities {
+                completion_provider: Some(CompletionOptions::default()),
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
                     TextDocumentSyncKind::FULL,
                 )),
@@ -87,5 +101,19 @@ impl LanguageServer for Backend {
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
         // TODO: Incremental sync (requires us to specify the corresponding server capability)
         self.client.log_message(MessageType::INFO, format!("Closed {}", params.text_document.uri)).await;
+    }
+
+    async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
+        // TODO: Filter by prefix etc.
+        let uri = params.text_document_position.text_document.uri;
+        Ok(self.functions_map.get(&uri).map(|functions|
+            CompletionResponse::Array(
+                functions.iter().map(|name| CompletionItem {
+                    label: name.to_owned(),
+                    kind: Some(CompletionItemKind::FUNCTION),
+                    ..Default::default()
+                }).collect()
+            )
+        ))
     }
 }
