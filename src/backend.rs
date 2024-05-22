@@ -41,6 +41,8 @@ impl Backend {
 
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
+    // TODO: Provide semantic tokens from parse trees
+
     async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
         Ok(InitializeResult {
             server_info: Some(ServerInfo {
