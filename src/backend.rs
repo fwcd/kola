@@ -1,23 +1,60 @@
 use dashmap::DashMap;
 use ropey::Rope;
+use tokio::sync::Mutex;
 use tower_lsp::{jsonrpc::Result, lsp_types::{DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, InitializeParams, InitializeResult, InitializedParams, MessageType, ServerCapabilities, ServerInfo, TextDocumentSyncCapability, TextDocumentSyncKind, Url}, Client, LanguageServer};
+use tree_sitter::{Parser, Tree};
 
-#[derive(Debug)]
 pub struct Backend {
     client: Client,
     document_map: DashMap<Url, Rope>,
+    parse_map: DashMap<Url, Tree>,
+    parser: Mutex<Parser>,
 }
 
 impl Backend {
     pub fn new(client: Client) -> Self {
+        let mut parser = Parser::new();
+        parser.set_language(&tree_sitter_kotlin::language()).expect("Could not load Kotlin grammar");
         Self {
             client,
             document_map: DashMap::new(),
+            parse_map: DashMap::new(),
+            parser: Mutex::new(parser),
         }
     }
 
+    // TODO: Use salsa to manage incremental parsing/recompilation etc.
+
     async fn on_change(&self, uri: Url, text: &str) {
-        self.document_map.insert(uri, Rope::from_str(text));
+        self.document_map.insert(uri.clone(), Rope::from_str(text));
+        // TODO: How do we handle old_tree properly for incremental parsing?
+        if let Some(parse) = self.parser.lock().await.parse(text, None) {
+            // TODO: Factor out this as a utility function for debug printing
+            {
+                let mut cursor = parse.root_node().walk();
+                let mut lines = Vec::new();
+                'outer: loop {
+                    self.client.log_message(MessageType::INFO, format!("Visiting {:?} at depth {}", cursor.node(), cursor.depth())).await;
+                    lines.push(format!("{}{:?}", " ".repeat(cursor.depth() as usize), cursor.node()));
+                    if cursor.goto_first_child() {
+                        continue;
+                    }
+                    if cursor.goto_next_sibling() {
+                        continue;
+                    }
+                    while cursor.goto_parent() {
+                        if cursor.goto_next_sibling() {
+                            continue 'outer;
+                        }
+                    }
+                    break;
+                }
+                self.client.log_message(MessageType::INFO, format!("Parsed\n{}", lines.join("\n"))).await;
+            }
+            self.parse_map.insert(uri, parse);
+        } else {
+            self.parse_map.remove(&uri);
+        }
     }
 }
 

@@ -355,6 +355,7 @@ dependencies = [
  "tokio",
  "tower-lsp",
  "tracing",
+ "tree-sitter",
  "tree-sitter-kotlin",
 ]
 
