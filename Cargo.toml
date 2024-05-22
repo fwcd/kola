@@ -1,6 +1,6 @@
 [package]
 name = "kola"
-version = "0.1.0"
+version = "0.1.1"
 description = "Fast and lightweight language server for Kotlin"
 edition = "2021"
 license = "GPL-3.0"
