@@ -67,9 +67,12 @@ impl Backend {
         }
 
         let bytes = self.document_map.get(&uri).unwrap().bytes().collect::<Vec<u8>>();
-        let old_tree = self.parse_map.get(&uri);
 
-        if let Some(tree) = self.parser.lock().await.parse(&bytes, old_tree.as_deref()) {
+        if let Some(tree) = {
+            let mut parser = self.parser.lock().await;
+            let old_tree = self.parse_map.get(&uri);
+            parser.parse(&bytes, old_tree.as_deref())
+        } {
             self.client.log_message(MessageType::INFO, format!("Parsed {}\n{}", uri, format_tree(&tree))).await;
 
             // Query function declarations (for proof-of-concept code completion)
@@ -81,9 +84,6 @@ impl Backend {
                 functions.push(name);
             }
             self.functions_map.insert(uri.clone(), functions);
-
-            // Drop the old tree reference to avoid deadlocking on insertion
-            drop(old_tree);
 
             self.parse_map.insert(uri, tree);
         } else {
