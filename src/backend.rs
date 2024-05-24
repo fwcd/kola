@@ -60,6 +60,7 @@ impl Backend {
                     old_end_position: Point::from_lsp(range.end),
                     new_end_position: Point::from_lsp(new_end),
                 });
+                self.client.log_message(MessageType::INFO, format!("Repaired {}\n{}", uri, format_tree(&old_tree))).await;
             }
         } else {
             // New document opened
@@ -68,9 +69,9 @@ impl Backend {
         }
 
         let bytes = self.document_map.get(&uri).unwrap().bytes().collect::<Vec<u8>>();
+        let old_tree = self.parse_map.get(&uri);
 
-        // TODO: Pass old_tree to parse and figure out why that doesn't work
-        if let Some(tree) = self.parser.lock().await.parse(&bytes, None) {
+        if let Some(tree) = self.parser.lock().await.parse(&bytes, old_tree.as_deref()) {
             self.client.log_message(MessageType::INFO, format!("Parsed {}\n{}", uri, format_tree(&tree))).await;
 
             // Query function declarations (for proof-of-concept code completion)
@@ -82,6 +83,9 @@ impl Backend {
                 functions.push(name);
             }
             self.functions_map.insert(uri.clone(), functions);
+
+            // Drop the old tree reference to avoid deadlocking on insertion
+            drop(old_tree);
 
             self.parse_map.insert(uri, tree);
         } else {
