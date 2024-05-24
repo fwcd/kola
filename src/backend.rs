@@ -34,7 +34,6 @@ impl Backend {
             // Existing document changed
 
             // Update rope
-            self.client.log_message(MessageType::INFO, format!("Updating rope for {} in range {:?}", uri, range)).await;
             let mut rope = self.document_map.get_mut(&uri).expect("Could not find document");
 
             let start_char = rope.position_to_char(range.start);
@@ -60,7 +59,6 @@ impl Backend {
                     old_end_position: Point::from_lsp(range.end),
                     new_end_position: Point::from_lsp(new_end),
                 });
-                self.client.log_message(MessageType::INFO, format!("Repaired {}\n{}", uri, format_tree(&old_tree))).await;
             }
         } else {
             // New document opened
