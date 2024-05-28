@@ -2,15 +2,15 @@ use dashmap::DashMap;
 use ropey::Rope;
 use tokio::sync::Mutex;
 use tower_lsp::{jsonrpc::Result, lsp_types::{CompletionItem, CompletionItemKind, CompletionOptions, CompletionParams, CompletionResponse, DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, InitializeParams, InitializeResult, InitializedParams, MessageType, ServerCapabilities, ServerInfo, TextDocumentContentChangeEvent, TextDocumentSyncCapability, TextDocumentSyncKind, Url}, Client, LanguageServer};
-use tree_sitter::{InputEdit, Parser, Point, Query, QueryCursor, Tree};
+use tree_sitter::{InputEdit, Parser, Point, Tree};
 
-use crate::utils::{format_tree, FromLsp, RopeExt};
+use crate::{analysis::{ast::ast, input::Input, Database}, utils::{format_tree, FromLsp, RopeExt}};
 
 pub struct Backend {
     client: Client,
     document_map: DashMap<Url, Rope>,
     parse_map: DashMap<Url, Tree>,
-    functions_map: DashMap<Url, Vec<String>>,
+    db: Mutex<Database>,
     parser: Mutex<Parser>,
 }
 
@@ -22,7 +22,7 @@ impl Backend {
             client,
             document_map: DashMap::new(),
             parse_map: DashMap::new(),
-            functions_map: DashMap::new(),
+            db: Mutex::new(Database::default()),
             parser: Mutex::new(parser),
         }
     }
@@ -74,17 +74,6 @@ impl Backend {
             parser.parse(&bytes, old_tree.as_deref())
         } {
             self.client.log_message(MessageType::INFO, format!("Parsed {}\n{}", uri, format_tree(&tree))).await;
-
-            // Query function declarations (for proof-of-concept code completion)
-            let query = Query::new(&tree_sitter_kotlin::language(), "(function_declaration (simple_identifier) @name)").unwrap(); // TODO: Use proper error handling
-            let mut cursor = QueryCursor::new();
-            let mut functions = Vec::new();
-            for query_match in cursor.matches(&query, tree.root_node(), &bytes as &[u8]) {
-                let name = query_match.captures[0].node.utf8_text(&bytes).unwrap().to_owned(); // TODO: Use proper error handling
-                functions.push(name);
-            }
-            self.functions_map.insert(uri.clone(), functions);
-
             self.parse_map.insert(uri, tree);
         } else {
             self.client.log_message(MessageType::WARNING, format!("Could not parse {}", uri)).await;
@@ -149,14 +138,22 @@ impl LanguageServer for Backend {
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
         // TODO: Filter by prefix etc.
         let uri = params.text_document_position.text_document.uri;
-        Ok(self.functions_map.get(&uri).map(|functions|
-            CompletionResponse::Array(
-                functions.iter().map(|name| CompletionItem {
-                    label: name.to_owned(),
-                    kind: Some(CompletionItemKind::FUNCTION),
-                    ..Default::default()
-                }).collect()
-            )
-        ))
+        let Some(rope) = self.document_map.get(&uri) else {
+            return Ok(None);
+        };
+        let Some(tree) = self.parse_map.get(&uri) else {
+            return Ok(None);
+        };
+        let bytes = rope.bytes().collect::<Vec<_>>();
+        let db = self.db.lock().await;
+        let input = Input::new(&*db, bytes, tree.clone());
+        let ast = ast(&*db, input);
+        Ok(Some(CompletionResponse::Array(ast.functions(&*db).iter().map(|f|
+            CompletionItem {
+                label: f.name(&*db).to_owned(),
+                kind: Some(CompletionItemKind::FUNCTION),
+                ..Default::default()
+            }
+        ).collect())))
     }
 }
