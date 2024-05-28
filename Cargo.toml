@@ -14,6 +14,7 @@ categories = ["compilers", "development-tools"]
 clap = { version = "4.5.4", features = ["derive"] }
 dashmap = "5.5.3"
 ropey = "1.6.1"
+salsa = { git = "https://github.com/salsa-rs/salsa.git", package = "salsa-2022", rev = "05b4e3ebdcdc47730cdd359e7e97fb2470527279" }
 tokio = { version = "1.37.0", features = ["rt-multi-thread", "macros", "io-std"] }
 tower-lsp = "0.20.0"
 tracing = "0.1.40"
