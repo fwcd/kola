@@ -1,5 +1,6 @@
 mod backend;
 mod utils;
+mod workspace;
 
 use backend::Backend;
 use clap::Parser;
