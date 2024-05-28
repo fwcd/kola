@@ -22,7 +22,7 @@ impl Backend {
             client,
             document_map: DashMap::new(),
             parse_map: DashMap::new(),
-            db: Mutex::new(Database::default()),
+            db: Mutex::new(Database::new()),
             parser: Mutex::new(parser),
         }
     }
@@ -78,6 +78,13 @@ impl Backend {
         } else {
             self.client.log_message(MessageType::WARNING, format!("Could not parse {}", uri)).await;
             self.parse_map.remove(&uri);
+        }
+    }
+
+    async fn flush_db_logs(&self) {
+        let logs: Vec<_> = self.db.lock().await.logs().lock().unwrap().drain(..).collect();
+        for log in logs {
+            self.client.log_message(MessageType::INFO, format!("Db: {}", log)).await;
         }
     }
 }
@@ -145,15 +152,21 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
         let bytes = rope.bytes().collect::<Vec<_>>();
-        let db = self.db.lock().await;
-        let input = Input::new(&*db, bytes, tree.clone());
-        let ast = ast(&*db, input);
-        Ok(Some(CompletionResponse::Array(ast.functions(&*db).iter().map(|f|
-            CompletionItem {
-                label: f.name(&*db).to_owned(),
-                kind: Some(CompletionItemKind::FUNCTION),
-                ..Default::default()
-            }
-        ).collect())))
+        let completions = {
+            let db = self.db.lock().await;
+            let input = Input::new(&*db, bytes, tree.clone());
+            let ast = ast(&*db, input);
+            ast.functions(&*db).iter().map(|f|
+                CompletionItem {
+                    label: f.name(&*db).to_owned(),
+                    kind: Some(CompletionItemKind::FUNCTION),
+                    ..Default::default()
+                }
+            ).collect()
+        };
+        // TODO: Find a more elegant solution, perhaps we could write a db lock guard wrapper that 
+        // automatically flushes the logs when dropped?
+        self.flush_db_logs().await;
+        Ok(Some(CompletionResponse::Array(completions)))
     }
 }
