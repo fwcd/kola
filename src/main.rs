@@ -1,4 +1,6 @@
+mod analysis;
 mod backend;
+mod model;
 mod utils;
 mod workspace;
 

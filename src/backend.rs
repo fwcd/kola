@@ -1,6 +1,6 @@
 use tower_lsp::{jsonrpc::Result, lsp_types::{CompletionItem, CompletionItemKind, CompletionOptions, CompletionParams, CompletionResponse, DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, InitializeParams, InitializeResult, InitializedParams, MessageType, ServerCapabilities, ServerInfo, TextDocumentContentChangeEvent, TextDocumentSyncCapability, TextDocumentSyncKind}, Client, LanguageServer};
 
-use crate::workspace::Workspace;
+use crate::{analysis::functions::declared_function_names, workspace::Workspace};
 
 pub struct Backend {
     client: Client,
@@ -72,8 +72,10 @@ impl LanguageServer for Backend {
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
         // TODO: Filter by prefix etc.
         let uri = params.text_document_position.text_document.uri;
+        let Some(document) = self.workspace.document(&uri) else { return Ok(None) };
+        let Some(parse_tree) = self.workspace.parse_tree(&uri) else { return Ok(None) };
         Ok(Some(CompletionResponse::Array(
-            self.workspace.visible_functions(&uri).iter().map(|name| CompletionItem {
+            declared_function_names(document, parse_tree).iter().map(|name| CompletionItem {
                 label: name.to_owned(),
                 kind: Some(CompletionItemKind::FUNCTION),
                 ..Default::default()

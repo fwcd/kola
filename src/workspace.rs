@@ -1,16 +1,16 @@
+use comemo::track;
 use dashmap::DashMap;
 use ropey::Rope;
 use tokio::sync::Mutex;
 use tower_lsp::{lsp_types::{MessageType, TextDocumentContentChangeEvent, Url}, Client};
-use tree_sitter::{InputEdit, Parser, Point, Query, QueryCursor, Tree};
+use tree_sitter::{InputEdit, Parser, Point, Tree};
 
-use crate::utils::{format_tree, FromLsp, RopeExt};
+use crate::{model::{Document, ParseTree}, utils::{format_tree, FromLsp, RopeExt}};
 
 pub struct Workspace {
     client: Client,
     document_map: DashMap<Url, Rope>,
     parse_map: DashMap<Url, Tree>,
-    functions_map: DashMap<Url, Vec<String>>,
     parser: Mutex<Parser>,
 }
 
@@ -22,7 +22,6 @@ impl Workspace {
             client,
             document_map: DashMap::new(),
             parse_map: DashMap::new(),
-            functions_map: DashMap::new(),
             parser: Mutex::new(parser),
         }
     }
@@ -72,25 +71,21 @@ impl Workspace {
             parser.parse(&bytes, old_tree.as_deref())
         } {
             self.client.log_message(MessageType::INFO, format!("Parsed {}\n{}", uri, format_tree(&tree))).await;
-
-            // Query function declarations (for proof-of-concept code completion)
-            let query = Query::new(&tree_sitter_kotlin::language(), "(function_declaration (simple_identifier) @name)").unwrap(); // TODO: Use proper error handling
-            let mut cursor = QueryCursor::new();
-            let mut functions = Vec::new();
-            for query_match in cursor.matches(&query, tree.root_node(), &bytes as &[u8]) {
-                let name = query_match.captures[0].node.utf8_text(&bytes).unwrap().to_owned(); // TODO: Use proper error handling
-                functions.push(name);
-            }
-            self.functions_map.insert(uri.clone(), functions);
-
             self.parse_map.insert(uri, tree);
         } else {
             self.client.log_message(MessageType::WARNING, format!("Could not parse {}", uri)).await;
             self.parse_map.remove(&uri);
         }
     }
+}
 
-    pub fn visible_functions(&self, uri: &Url) -> Vec<String> {
-        self.functions_map.get(uri).map(|fs| fs.clone()).unwrap_or_default()
+#[track]
+impl Workspace {
+    pub fn document<'a>(&'a self, uri: &Url) -> Option<Document> {
+        self.document_map.get(uri).map(|rope| Document::from(rope.clone()))
+    }
+
+    pub fn parse_tree<'a>(&'a self, uri: &Url) -> Option<ParseTree> {
+        self.parse_map.get(uri).map(|tree| ParseTree::from(tree.clone()))
     }
 }
