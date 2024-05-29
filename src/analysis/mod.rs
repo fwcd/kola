@@ -1,1 +1,1 @@
-pub mod functions;
+pub mod syntax;

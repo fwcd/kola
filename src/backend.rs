@@ -1,7 +1,7 @@
 use comemo::Track;
 use tower_lsp::{jsonrpc::Result, lsp_types::{CompletionItem, CompletionItemKind, CompletionOptions, CompletionParams, CompletionResponse, DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, InitializeParams, InitializeResult, InitializedParams, MessageType, ServerCapabilities, ServerInfo, TextDocumentContentChangeEvent, TextDocumentSyncCapability, TextDocumentSyncKind}, Client, LanguageServer};
 
-use crate::{analysis::functions::declared_function_names, workspace::Workspace};
+use crate::{analysis::syntax::declared_function_names, workspace::Workspace};
 
 pub struct Backend {
     client: Client,
