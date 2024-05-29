@@ -81,11 +81,15 @@ impl Workspace {
 
 #[track]
 impl Workspace {
-    pub fn document<'a>(&'a self, uri: &Url) -> Option<Document> {
+    pub fn document(&self, uri: &Url) -> Option<Document> {
         self.document_map.get(uri).map(|rope| Document::from(rope.clone()))
     }
 
-    pub fn parse_tree<'a>(&'a self, uri: &Url) -> Option<ParseTree> {
+    pub fn bytes(&self, uri: &Url) -> Option<Vec<u8>> {
+        self.document_map.get(uri).map(|rope| rope.bytes().collect())
+    }
+
+    pub fn parse_tree(&self, uri: &Url) -> Option<ParseTree> {
         self.parse_map.get(uri).map(|tree| ParseTree::from(tree.clone()))
     }
 }

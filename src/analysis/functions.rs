@@ -1,12 +1,14 @@
-use comemo::memoize;
+use comemo::{memoize, Tracked};
+use tower_lsp::lsp_types::Url;
 use tree_sitter::{Query, QueryCursor};
 
-use crate::model::{Document, ParseTree};
+use crate::workspace::Workspace;
 
 #[memoize]
-pub fn declared_function_names(document: Document, parse_tree: ParseTree) -> Vec<String> {
+pub fn declared_function_names(uri: Url, workspace: Tracked<Workspace>) -> Vec<String> {
     // Query function declarations (for proof-of-concept code completion)
-    let bytes: Vec<_> = document.bytes().collect();
+    let Some(bytes) = workspace.bytes(&uri) else { return Vec::new() };
+    let Some(parse_tree) = workspace.parse_tree(&uri) else { return Vec::new() };
     let query = Query::new(&tree_sitter_kotlin::language(), "(function_declaration (simple_identifier) @name)").unwrap(); // TODO: Use proper error handling
     let mut cursor = QueryCursor::new();
     let mut functions = Vec::new();
