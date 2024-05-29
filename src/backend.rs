@@ -74,7 +74,7 @@ impl LanguageServer for Backend {
         // TODO: Filter by prefix etc.
         let uri = params.text_document_position.text_document.uri;
         Ok(Some(CompletionResponse::Array(
-            declared_function_names(uri, self.workspace.track()).iter().map(|name| CompletionItem {
+            declared_function_names(&uri, self.workspace.track()).iter().map(|name| CompletionItem {
                 label: name.to_owned(),
                 kind: Some(CompletionItemKind::FUNCTION),
                 ..Default::default()
