@@ -1,4 +1,4 @@
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 
 use ropey::Rope;
 
@@ -19,5 +19,11 @@ impl Deref for Document {
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl DerefMut for Document {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }

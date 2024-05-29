@@ -1,6 +1,6 @@
 // TODO: ref-cast
 
-use std::{hash::Hash, ops::Deref};
+use std::{hash::Hash, ops::{Deref, DerefMut}};
 
 use tree_sitter::Tree;
 
@@ -35,5 +35,11 @@ impl Deref for ParseTree {
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl DerefMut for ParseTree {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
